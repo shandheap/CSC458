@@ -1,2 +1,3 @@
 # CSC458
-Computer Networks Assignments
+
+Assignments for Computer Networks course at University of Toronto (St. George).
