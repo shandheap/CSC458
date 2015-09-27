@@ -18,12 +18,15 @@
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) {
     /* Copy the pointer to the arp cache requests array */
-    struct sr_arpreq *reqs = sr->arp_cache.requests;
+    struct sr_arpreq *reqs = sr->cache.requests;
+    /* Use intermediate temporary var for next request on queue */
+    struct sr_arpreq *next;
 
     /* Iterate through ARP cache requests */
     while (reqs != NULL) {
-        handle_arpreq(*reqs);
-        reqs = reqs->next;
+        next = reqs->next;
+        handle_arpreq(&sr->cache, reqs);
+        reqs = next;
     }
 }
 
@@ -250,5 +253,32 @@ void *sr_arpcache_timeout(void *sr_ptr) {
     }
     
     return NULL;
+}
+
+/* Handles an ARP request from the ARP queue */
+void handle_arpreq(struct sr_arpcache *cache, struct sr_arpreq *req) {
+    /* Get current sys time */
+    time_t now;
+    time(&now);
+
+    /* Check if more than a second elapsed between last send time and now */
+    if (difftime(now, req->sent) > 1.0) {
+        /* Check if ARP request has been sent 5 times without a reply */
+        if (req->times_sent >= 5) {
+             /* send icmp host unreachable to source addr of all pkts waiting
+               on this request */
+            sr_arpreq_destroy(cache, req);
+        } else {
+            /* send arprequest; */
+            /* fork - where the response is handled
+             destroy arpreq queue entry
+             store entry in cache
+             timeout for arp request */
+
+            time(&now);
+            req->sent = now;
+            req->times_sent++;
+        }
+    }
 }
 

@@ -36,3 +36,6 @@
 
 # Python compiled files
 *.pyc
+
+# Intellij files
+.idea
