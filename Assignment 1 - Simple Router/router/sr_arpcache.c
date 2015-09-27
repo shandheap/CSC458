@@ -16,8 +16,15 @@
   checking whether we should resend an request or destroy the arp request.
   See the comments in the header file for an idea of what it should look like.
 */
-void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
-    /* Fill this in */
+void sr_arpcache_sweepreqs(struct sr_instance *sr) {
+    /* Copy the pointer to the arp cache requests array */
+    struct sr_arpreq *reqs = sr->arp_cache.requests;
+
+    /* Iterate through ARP cache requests */
+    while (reqs != NULL) {
+        handle_arpreq(*reqs);
+        reqs = reqs->next;
+    }
 }
 
 /* You should not need to touch the rest of this code. */
