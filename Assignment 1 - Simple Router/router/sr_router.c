@@ -71,14 +71,34 @@ void sr_handlepacket(struct sr_instance* sr,
         unsigned int len,
         char* interface/* lent */)
 {
-  /* REQUIRES */
-  assert(sr);
-  assert(packet);
-  assert(interface);
+    /* REQUIRES */
+    assert(sr);
+    assert(packet);
+    assert(interface);
 
-  printf("*** -> Received packet of length %d \n",len);
+    printf("*** -> Received packet of length %d \n",len);
 
-  /* fill in code here */
+    /* Check if packet is ARP */
+    if (ethertype(packet) == ethertype_arp) {
+        /* Check if ARP packet is an ARP request */
+        if (ntohs(((sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t)))->ar_op) == arp_op_request) {
+            /* Add packet to ARP queue */
+            sr_arpcache_queuereq(
+                    &(sr->cache),
+                    ((sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t)))->ar_tip,
+                    packet,
+                    len,
+                    ((struct sr_packet *) packet)->iface
+            );
+        }
+        else if (ntohs(((sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t)))->ar_op) == arp_op_reply) {
+            /* TODO: Implement ARP reply */
+        }
+    }
+    /* Check if packet is IP */
+    else if (ethertype(packet) == ethertype_ip) {
+        /* TODO: Implement IP packet handling */
+    }
 
 }/* end sr_ForwardPacket */
 
