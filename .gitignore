@@ -36,6 +36,12 @@
 
 # Python compiled files
 *.pyc
+*.pyo
+*.egg-info
 
 # Intellij files
 .idea
+
+# Ansi C Compiled Files
+*.d
+sr
