@@ -78,24 +78,30 @@ void sr_handlepacket(struct sr_instance* sr,
 
     printf("*** -> Received packet of length %d \n",len);
 
-    /* Check if packet is ARP */
+    /* Packet is ARP */
     if (ethertype(packet) == ethertype_arp) {
+        /* Get the packet's arp header */
+        sr_arp_hdr_t * arp_hdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+        unsigned short ar_op = ntohs(arp_hdr->ar_op);
+        /*char * s_iface = ((sr_ethernet_hdr_t *) packet)->;*/
+
         /* Check if ARP packet is an ARP request */
-        if (ntohs(((sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t)))->ar_op) == arp_op_request) {
+        if (ar_op == arp_op_request) {
             /* Add packet to ARP queue */
             sr_arpcache_queuereq(
                     &(sr->cache),
-                    ((sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t)))->ar_tip,
+                    arp_hdr->ar_tip,
                     packet,
                     len,
-                    ((struct sr_packet *) packet)->iface
+                    interface
             );
         }
-        else if (ntohs(((sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t)))->ar_op) == arp_op_reply) {
+        else if (ar_op == arp_op_reply) {
             /* TODO: Implement ARP reply */
+
         }
     }
-    /* Check if packet is IP */
+    /* Packet is IP */
     else if (ethertype(packet) == ethertype_ip) {
         /* TODO: Implement IP packet handling */
     }
