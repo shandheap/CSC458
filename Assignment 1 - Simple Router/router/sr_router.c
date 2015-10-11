@@ -80,17 +80,18 @@ void sr_handlepacket(struct sr_instance* sr,
 
     /* Packet is ARP */
     if (ethertype(packet) == ethertype_arp) {
-        /* Get the packet's arp header */
+        /* Get the packet's arp header (padding inferred from sr_arp_req_not_for_us) */
         sr_arp_hdr_t * arp_hdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+        /* Change the byte-order of it's properties */
         unsigned short ar_op = ntohs(arp_hdr->ar_op);
-        /*char * s_iface = ((sr_ethernet_hdr_t *) packet)->;*/
+        uint32_t tip = ntohl(arp_hdr->ar_tip);
 
         /* Check if ARP packet is an ARP request */
         if (ar_op == arp_op_request) {
             /* Add packet to ARP queue */
             sr_arpcache_queuereq(
                     &(sr->cache),
-                    arp_hdr->ar_tip,
+                    tip,
                     packet,
                     len,
                     interface

@@ -261,6 +261,13 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
     time_t now;
     time(&now);
 
+    /* Check if ARP cache entry for the req ip exists */
+    struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, req->ip);
+    /* Entry does not exist so make one */
+    if (!entry) {
+        /* TODO: Make entry */
+    }
+
     /* Request has not been sent yet */
     if (!req->sent) {
         /* Set request sent time as current sys time */
