@@ -13,6 +13,8 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 
 #include "sr_if.h"
@@ -80,38 +82,80 @@ void sr_handlepacket(struct sr_instance* sr,
 
     /* Packet is ARP */
     if (ethertype(packet) == ethertype_arp) {
+        /* Initialize packet size var */
+        size_t pkt_size = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
         /* Check if packet is of minimum length */
-        if (len < sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t) ) {
+        if (len < pkt_size) {
             return;
         }
 
-        /* Get the packet's arp header */
+        /* Get the packet's ethernet and arp headers */
+        sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *) packet;
         sr_arp_hdr_t * arp_hdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
 
-        /* Check if ARP packet is a request */
+        /* Do cache lookup */
+        struct sr_arpentry * entry = sr_arpcache_lookup(&(sr->cache), arp_hdr->ar_tip);
+        /* If cache entry exists then return the corresponding MAC */
+        if (entry) {
+            /* Modify the packet to construct reply */
+            sr_send_packet(sr, packet, len, interface);
+
+            /*TODO: Refactor this code block into a func*/
+            /* Prepare ARP reply */
+            uint8_t * buf = malloc(pkt_size);
+            memcpy(buf, packet, pkt_size);
+            /* Modify existing packet for reply */
+            sr_ethernet_hdr_t * new_eth_hdr = (sr_ethernet_hdr_t *) buf;
+            sr_arp_hdr_t * new_arp_hdr = (sr_arp_hdr_t *) (buf + sizeof(sr_ethernet_hdr_t));
+            /* Constuct new ethernet headers */
+            memcpy(new_eth_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
+            memcpy(new_eth_hdr->ether_shost, entry->mac, ETHER_ADDR_LEN);
+            /* Construct new arp headers */
+            new_arp_hdr->ar_op = htons(arp_op_reply);
+            new_arp_hdr->ar_tip = arp_hdr->ar_sip;
+            new_arp_hdr->ar_sip = arp_hdr->ar_tip;
+            memcpy(new_arp_hdr->ar_tha, arp_hdr->ar_sha, ETHER_ADDR_LEN);
+            memcpy(new_arp_hdr->ar_sha, arp_hdr->ar_tha, ETHER_ADDR_LEN);
+
+            /* Send the ARP reply */
+            sr_send_packet(sr, buf, pkt_size, interface);
+            /* free memory for reply */
+            free(buf);
+        }
+
+        /* ARP packet is a request */
         if (arp_hdr->ar_op == htons(arp_op_request)) {
             /* Get the router interface record for target ip */
             struct sr_if * iface = sr_get_interface_by_ip(sr, arp_hdr->ar_tip);
             if (iface) {
-                print_addr_eth(iface->addr);
-            }
-            /* Otherwise arp packet was not for us */
-            else {
-                return;
-            }
-        }
-        /* Otherwise check if ARP packet is a reply */
-        else if (arp_hdr->ar_op == htons(arp_op_reply)) {
-            /* TODO: Implement ARP reply */
-            /* Do cache lookup */
-            struct sr_arpentry * entry = sr_arpcache_lookup(&(sr->cache), arp_hdr->ar_tip);
-            /* If cache entry exists then return the corresponding MAC */
-            if (entry) {
-                /* Modify the packet to construct reply */
-                sr_send_packet(sr, packet, len, interface);
-                entry->mac;
+                /*TODO: Refactor this code block into a func*/
+                /* Prepare ARP reply */
+                uint8_t * buf = malloc(pkt_size);
+                memcpy(buf, packet, pkt_size);
+                /* Modify existing packet for reply */
+                sr_ethernet_hdr_t * new_eth_hdr = (sr_ethernet_hdr_t *) buf;
+                sr_arp_hdr_t * new_arp_hdr = (sr_arp_hdr_t *) (buf + sizeof(sr_ethernet_hdr_t));
+                /* Constuct new ethernet headers */
+                memcpy(new_eth_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
+                memcpy(new_eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN);
+                /* Construct new arp headers */
+                new_arp_hdr->ar_op = htons(arp_op_reply);
+                new_arp_hdr->ar_tip = arp_hdr->ar_sip;
+                new_arp_hdr->ar_sip = arp_hdr->ar_tip;
+                memcpy(new_arp_hdr->ar_tha, arp_hdr->ar_sha, ETHER_ADDR_LEN);
+                memcpy(new_arp_hdr->ar_sha, arp_hdr->ar_tha, ETHER_ADDR_LEN);
+
+                /* Send the ARP reply */
+                sr_send_packet(sr, buf, pkt_size, interface);
+                /* free memory for reply */
+                free(buf);
             }
 
+            return;
+        }
+        /* ARP packet is a reply */
+        else if (arp_hdr->ar_op == htons(arp_op_reply)) {
+            /* TODO: Implement ARP reply */
             /* Add packet to ARP queue */
             sr_arpcache_queuereq(
                     &(sr->cache),
@@ -126,20 +170,21 @@ void sr_handlepacket(struct sr_instance* sr,
         else {
             return;
         }
-
-        print_hdr_arp(packet);
     }
     /* Packet is IP */
     else if (ethertype(packet) == ethertype_ip) {
         /* TODO: Implement IP packet handling */
         /* Do sanity check for packet */
         /* Check if packet is of minimum length */
-        if (len < sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) ) {
+        if (len < sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)) {
             return;
         }
         /* Get the packet's ip header */
         sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+        print_hdr_ip((uint8_t *) ip_hdr);
         /* Reject packet if checksums don't match */
+        fprintf(stdout, "%d\n", ip_hdr->ip_sum);
+        fprintf(stdout, "%d\n", cksum(packet, len));
         if (cksum(packet, len) != ip_hdr->ip_sum) {
 
         }
