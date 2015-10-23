@@ -80,31 +80,69 @@ void sr_handlepacket(struct sr_instance* sr,
 
     /* Packet is ARP */
     if (ethertype(packet) == ethertype_arp) {
-        /* Get the packet's arp header (padding inferred from sr_arp_req_not_for_us) */
-        sr_arp_hdr_t * arp_hdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
-        /* Change the byte-order of it's properties */
-        unsigned short ar_op = ntohs(arp_hdr->ar_op);
-        uint32_t tip = ntohl(arp_hdr->ar_tip);
+        /* Check if packet is of minimum length */
+        if (len < sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t) ) {
+            return;
+        }
 
-        /* Check if ARP packet is an ARP request */
-        if (ar_op == arp_op_request) {
+        /* Get the packet's arp header */
+        sr_arp_hdr_t * arp_hdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+
+        /* Check if ARP packet is a request */
+        if (arp_hdr->ar_op == htons(arp_op_request)) {
+            /* Get the router interface record for target ip */
+            struct sr_if * iface = sr_get_interface_by_ip(sr, arp_hdr->ar_tip);
+            if (iface) {
+                print_addr_eth(iface->addr);
+            }
+            /* Otherwise arp packet was not for us */
+            else {
+                return;
+            }
+        }
+        /* Otherwise check if ARP packet is a reply */
+        else if (arp_hdr->ar_op == htons(arp_op_reply)) {
+            /* TODO: Implement ARP reply */
+            /* Do cache lookup */
+            struct sr_arpentry * entry = sr_arpcache_lookup(&(sr->cache), arp_hdr->ar_tip);
+            /* If cache entry exists then return the corresponding MAC */
+            if (entry) {
+                /* Modify the packet to construct reply */
+                sr_send_packet(sr, packet, len, interface);
+                entry->mac;
+            }
+
             /* Add packet to ARP queue */
             sr_arpcache_queuereq(
                     &(sr->cache),
-                    tip,
+                    arp_hdr->ar_tip,
                     packet,
                     len,
                     interface
             );
-        }
-        else if (ar_op == arp_op_reply) {
-            /* TODO: Implement ARP reply */
 
         }
+        /* Otherwise invalid op code so ignore packet */
+        else {
+            return;
+        }
+
+        print_hdr_arp(packet);
     }
     /* Packet is IP */
     else if (ethertype(packet) == ethertype_ip) {
         /* TODO: Implement IP packet handling */
+        /* Do sanity check for packet */
+        /* Check if packet is of minimum length */
+        if (len < sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) ) {
+            return;
+        }
+        /* Get the packet's ip header */
+        sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+        /* Reject packet if checksums don't match */
+        if (cksum(packet, len) != ip_hdr->ip_sum) {
+
+        }
     }
 
 }/* end sr_ForwardPacket */
