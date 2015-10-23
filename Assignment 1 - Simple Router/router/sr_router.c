@@ -135,7 +135,7 @@ void sr_handlepacket(struct sr_instance* sr,
                 /* Modify existing packet for reply */
                 sr_ethernet_hdr_t * new_eth_hdr = (sr_ethernet_hdr_t *) buf;
                 sr_arp_hdr_t * new_arp_hdr = (sr_arp_hdr_t *) (buf + sizeof(sr_ethernet_hdr_t));
-                /* Constuct new ethernet headers */
+                /* Construct new ethernet headers */
                 memcpy(new_eth_hdr->ether_dhost, eth_hdr->ether_shost, ETHER_ADDR_LEN);
                 memcpy(new_eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN);
                 /* Construct new arp headers */
@@ -143,7 +143,7 @@ void sr_handlepacket(struct sr_instance* sr,
                 new_arp_hdr->ar_tip = arp_hdr->ar_sip;
                 new_arp_hdr->ar_sip = arp_hdr->ar_tip;
                 memcpy(new_arp_hdr->ar_tha, arp_hdr->ar_sha, ETHER_ADDR_LEN);
-                memcpy(new_arp_hdr->ar_sha, arp_hdr->ar_tha, ETHER_ADDR_LEN);
+                memcpy(new_arp_hdr->ar_sha, iface->addr, ETHER_ADDR_LEN);
 
                 /* Send the ARP reply */
                 sr_send_packet(sr, buf, pkt_size, interface);
@@ -173,20 +173,21 @@ void sr_handlepacket(struct sr_instance* sr,
     }
     /* Packet is IP */
     else if (ethertype(packet) == ethertype_ip) {
-        /* TODO: Implement IP packet handling */
-        /* Do sanity check for packet */
         /* Check if packet is of minimum length */
         if (len < sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t)) {
             return;
         }
         /* Get the packet's ip header */
         sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
-        print_hdr_ip((uint8_t *) ip_hdr);
+        /* Verify checksum by ensuring that the computed cksum is zero */
+        uint16_t verify_sum = ~cksum(ip_hdr, ip_hdr->ip_hl * 4);
         /* Reject packet if checksums don't match */
-        fprintf(stdout, "%d\n", ip_hdr->ip_sum);
-        fprintf(stdout, "%d\n", cksum(packet, len));
-        if (cksum(packet, len) != ip_hdr->ip_sum) {
-
+        if (verify_sum) {
+            /* TODO: Send ICMP message about incorrect checksum */
+            return;
+        /* Otherwise try to forward IP packet */
+        } else {
+            /* TODO: Implement IP packet handling */
         }
     }
 
