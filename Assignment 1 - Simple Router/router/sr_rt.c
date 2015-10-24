@@ -176,3 +176,30 @@ void sr_print_routing_entry(struct sr_rt* entry)
     printf("%s\n",entry->interface);
 
 } /* -- sr_print_routing_entry -- */
+
+/*---------------------------------------------------------------------
+ * Method: sr_lpm(struct sr_instance*, uint32_t)
+ * Scope:  Global
+ *
+ * This method is called to perform longest prefix match of the ip on
+ * the routing table's entries.
+ *
+ *---------------------------------------------------------------------*/
+struct sr_rt * sr_lpm(struct sr_instance* sr, uint32_t ip) {
+    /* Perform longest prefix match on each entry */
+    int shift = 0;
+    while (shift < 32) {
+        /* Initialize iterator */
+        struct sr_rt * rt_walker = sr->routing_table;
+        while (rt_walker) {
+            /* Perform bit comparisons to find match */
+            if ( (ip << shift) == (rt_walker->dest.s_addr << shift) ) {
+                return rt_walker;
+            }
+            rt_walker = rt_walker->next;
+        }
+        shift = shift + 8;
+    }
+
+    return 0;
+} /* -- sr_lpm -- */

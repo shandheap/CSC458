@@ -98,8 +98,6 @@ void sr_handlepacket(struct sr_instance* sr,
         /* If cache entry exists then return the corresponding MAC */
         if (entry) {
             /* Modify the packet to construct reply */
-            sr_send_packet(sr, packet, len, interface);
-
             /*TODO: Refactor this code block into a func*/
             /* Prepare ARP reply */
             uint8_t * buf = malloc(len);
@@ -235,7 +233,18 @@ void sr_handlepacket(struct sr_instance* sr,
                 return;
             }
 
-            /* TODO: Longest Prefix Match */
+            /* Perform longest prefix match for destination ip */
+            struct sr_rt * match = sr_lpm(sr, ip_hdr->ip_dst);
+            /* There's a longest prefix match so use that hop ip */
+            if (match) {
+                /* TODO: Refactor cache code block */
+                /* Do cache lookup */
+                struct sr_arpentry * entry = sr_arpcache_lookup(&(sr->cache), match->dest.s_addr);
+                /* If cache entry exists then return the corresponding MAC */
+                if (entry) {
+                    /* Modify the packet to construct reply */
+                }
+            }
 
             /* Check the ARP cache for the next-hop MAC address corresponding to the next-hop IP. If it’s there,
              * send it. Otherwise, send an ARP request for the next-hop IP

@@ -18,12 +18,12 @@
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) {
     /* Copy the pointer to the arp cache requests array */
-    struct sr_arpreq *reqs = sr->cache.requests;
+    struct sr_arpreq * reqs = sr->cache.requests;
     /* Use intermediate temporary var for next request on queue */
-    struct sr_arpreq *next;
+    struct sr_arpreq * next;
 
     /* Iterate through ARP cache requests */
-    while (reqs != NULL) {
+    while (reqs) {
         next = reqs->next;
         sr_handle_arpreq(sr, reqs);
         reqs = next;
