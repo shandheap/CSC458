@@ -257,50 +257,61 @@ void *sr_arpcache_timeout(void *sr_ptr) {
 
 /* Handles an ARP request from the ARP queue */
 void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
-    /* Get current sys time */
-    time_t now;
-    time(&now);
-
-    /* Check if ARP cache entry for the req ip exists */
-    struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, req->ip);
-    /* Entry does not exist so make one */
-    if (!entry) {
-        /* TODO: Make entry */
+    /* Initialize times_sent to 0 */
+    if (!req->times_sent) {
+        req->times_sent = 0;
     }
 
-    /* Request has not been sent yet */
-    if (!req->sent) {
+    /* Send ARP packet if it hasn't been sent at least 5 times */
+    if (req->times_sent < 5) {
+        /* Construct ARP packet */
+        size_t pkt_size = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
+        uint8_t * buf = malloc(pkt_size);
+
+        /* Get the ip header for the original IP packet */
+        sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) (req->packets->buf + sizeof(sr_ethernet_hdr_t));
+
+        /* Get the headers for the new packet */
+        sr_ethernet_hdr_t * new_eth_hdr = (sr_ethernet_hdr_t *) buf;
+        sr_arp_hdr_t * new_arp_hdr = (sr_arp_hdr_t *) (buf + sizeof(sr_ethernet_hdr_t));
+
+        /* Define broadcast MAC */
+        uint8_t * broadcast_mac = malloc(ETHER_ADDR_LEN);
+        memset(broadcast_mac, 255, ETHER_ADDR_LEN);
+
+        /* Construct new ethernet headers */
+        memcpy(new_eth_hdr->ether_dhost, broadcast_mac, ETHER_ADDR_LEN);
+        memcpy(new_eth_hdr->ether_shost, req->packets->iface, ETHER_ADDR_LEN);
+        new_eth_hdr->ether_type = ntohs(ethertype_arp);
+
+        /* Construct new arp headers */
+        new_arp_hdr->ar_hrd = ntohs(arp_hrd_ethernet);
+        new_arp_hdr->ar_pro = ntohs(ethertype_ip);
+        new_arp_hdr->ar_hln = 6;
+        new_arp_hdr->ar_pln = 4;
+        new_arp_hdr->ar_op = htons(arp_op_request);
+        new_arp_hdr->ar_tip = req->ip;
+        new_arp_hdr->ar_sip = ip_hdr->ip_dst;
+        memcpy(new_arp_hdr->ar_tha, broadcast_mac, ETHER_ADDR_LEN);
+        memcpy(new_arp_hdr->ar_sha, req->packets->iface, ETHER_ADDR_LEN);
+
+        struct sr_if * iface = sr_get_interface_by_ip(sr, ip_hdr->ip_dst);
+
+        /* Send the ARP reply */
+        sr_send_packet(sr, buf, pkt_size, iface->name);
+        /* free memory for packet */
+        free(buf);
+
         /* Set request sent time as current sys time */
         time(&req->sent);
         req->times_sent++;
-
-        /* Get the linked list of packets for req */
-        struct sr_packet * sr_pkt = req->packets;
-
-        /* Get the properties of the first packet for req */
-        uint8_t * buf = sr_pkt->buf;
-        unsigned int len = sr_pkt->len;
-        char * iface = sr_pkt->iface;
-
-        sr_send_packet(sr, buf, len, iface);
     }
-    /* Check if more than a second elapsed between last send time and now */
-    else if (difftime(now, req->sent) > 1.0) {
-        /* Check if ARP request has been sent 5 times without a reply */
-        if (req->times_sent >= 5) {
-             /* send icmp host unreachable to source addr of all pkts waiting
-               on this request */
-            sr_arpreq_destroy(&sr->cache, req);
-        } else {
-            /* send arprequest; */
-            /* fork - where the response is handled
-             destroy arpreq queue entry
-             store entry in cache
-             timeout for arp request */
 
-            time(&req->sent);
-            req->times_sent++;
-        }
+    /* ARP request has been sent 5 times without a reply */
+    else {
+         /* send icmp host unreachable to source addr of all pkts waiting
+           on this request */
+        sr_arpreq_destroy(&sr->cache, req);
     }
 }
 
