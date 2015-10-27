@@ -268,9 +268,6 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
         size_t pkt_size = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
         uint8_t * buf = malloc(pkt_size);
 
-        /* Get the ip header for the original IP packet */
-        sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) (req->packets->buf + sizeof(sr_ethernet_hdr_t));
-
         /* Get the headers for the new packet */
         sr_ethernet_hdr_t * new_eth_hdr = (sr_ethernet_hdr_t *) buf;
         sr_arp_hdr_t * new_arp_hdr = (sr_arp_hdr_t *) (buf + sizeof(sr_ethernet_hdr_t));
@@ -279,9 +276,12 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
         uint8_t * broadcast_mac = malloc(ETHER_ADDR_LEN);
         memset(broadcast_mac, 255, ETHER_ADDR_LEN);
 
+        /* Get the routing interface */
+        struct sr_if * iface = sr_get_interface(sr, req->packets->iface);
+
         /* Construct new ethernet headers */
         memcpy(new_eth_hdr->ether_dhost, broadcast_mac, ETHER_ADDR_LEN);
-        memcpy(new_eth_hdr->ether_shost, req->packets->iface, ETHER_ADDR_LEN);
+        memcpy(new_eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN);
         new_eth_hdr->ether_type = ntohs(ethertype_arp);
 
         /* Construct new arp headers */
@@ -291,11 +291,9 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
         new_arp_hdr->ar_pln = 4;
         new_arp_hdr->ar_op = htons(arp_op_request);
         new_arp_hdr->ar_tip = req->ip;
-        new_arp_hdr->ar_sip = ip_hdr->ip_dst;
+        new_arp_hdr->ar_sip = iface->ip;
         memcpy(new_arp_hdr->ar_tha, broadcast_mac, ETHER_ADDR_LEN);
-        memcpy(new_arp_hdr->ar_sha, req->packets->iface, ETHER_ADDR_LEN);
-
-        struct sr_if * iface = sr_get_interface_by_ip(sr, ip_hdr->ip_dst);
+        memcpy(new_arp_hdr->ar_sha, iface->addr, ETHER_ADDR_LEN);
 
         /* Send the ARP reply */
         sr_send_packet(sr, buf, pkt_size, iface->name);
