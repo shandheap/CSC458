@@ -183,3 +183,7 @@ void print_hdrs(uint8_t *buf, uint32_t length) {
   }
 }
 
+/* Function for setting breakpoints. Use finish when gdb breaks on this function to debug outer scope. */
+void set_breakpoint() {
+  return;
+}
