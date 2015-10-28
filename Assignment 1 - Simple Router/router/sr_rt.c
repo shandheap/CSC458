@@ -204,25 +204,3 @@ struct sr_rt * sr_lpm(struct sr_instance* sr, uint32_t ip) {
 
     return rt_walker;
 } /* -- sr_lpm -- */
-
-/*---------------------------------------------------------------------
- * Method: sr_find_rt_by_ip(struct sr_instance*, uint32_t)
- * Scope:  Global
- *
- * This method is called to find the routing table entry that corresponds
- * to the given ip. Returns NULL if no entry was found.
- *
- *---------------------------------------------------------------------*/
-struct sr_rt * sr_find_rt_by_ip(struct sr_instance* sr, uint32_t ip) {
-    /* Initialize iterator */
-    struct sr_rt * rt_walker = sr->routing_table;
-    /* Iterate through */
-    while (rt_walker) {
-        if (ip == rt_walker->dest.s_addr) {
-            return rt_walker;
-        }
-        rt_walker = rt_walker->next;
-    }
-
-    return rt_walker;
-} /* -- sr_find_rt_by_ip -- */

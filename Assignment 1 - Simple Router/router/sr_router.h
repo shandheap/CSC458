@@ -66,6 +66,30 @@ int sr_read_from_server(struct sr_instance* );
 
 /* -- sr_router.c -- */
 void sr_init(struct sr_instance* );
+void modify_eth_header(sr_ethernet_hdr_t * eth_hdr,  /* Ethernet header to modify */
+                          uint8_t * ether_dhost,        /* destination ethernet address */
+                          uint8_t * ether_shost,        /* source ethernet address */
+                          uint16_t ether_type           /* packet type ID */
+);
+
+void modify_arp_header(sr_arp_hdr_t * arp_hdr,             /* ARP header pointer to modify */
+                          unsigned short  ar_hrd,             /* format of hardware address   */
+                          unsigned short  ar_pro,             /* format of protocol address   */
+                          unsigned char   ar_hln,             /* length of hardware address   */
+                          unsigned char   ar_pln,             /* length of protocol address   */
+                          unsigned short  ar_op,              /* ARP opcode (command)         */
+                          unsigned char   ar_sha[ETHER_ADDR_LEN],   /* sender hardware address      */
+                          uint32_t        ar_sip,             /* sender IP address            */
+                          unsigned char   ar_tha[ETHER_ADDR_LEN],   /* target hardware address      */
+                          uint32_t        ar_tip             /* target IP address            */
+);
+
+void modify_icmp_header(sr_icmp_hdr_t * icmp_hdr,    /* ICMP header to modify */
+                           uint8_t icmp_type,            /* ICMP type */
+                           uint8_t icmp_code             /* ICMP code */
+);
+
+void sr_handle_arp_packet(struct sr_instance* , uint8_t * , unsigned int , char* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 
 /* -- sr_if.c -- */

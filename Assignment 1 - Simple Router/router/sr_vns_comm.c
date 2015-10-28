@@ -43,6 +43,7 @@
 
 #include "sha1.h"
 #include "vnscommand.h"
+#include "sr_utils.h"
 
 static void sr_log_packet(struct sr_instance* , uint8_t* , int );
 static int  sr_arp_req_not_for_us(struct sr_instance* sr,

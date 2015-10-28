@@ -10,6 +10,7 @@
 #include "sr_router.h"
 #include "sr_if.h"
 #include "sr_protocol.h"
+#include "sr_utils.h"
 
 /* 
   This function gets called every second. For each request sent out, we keep
@@ -257,11 +258,6 @@ void *sr_arpcache_timeout(void *sr_ptr) {
 
 /* Handles an ARP request from the ARP queue */
 void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
-    /* Initialize times_sent to 0 */
-    if (!req->times_sent) {
-        req->times_sent = 0;
-    }
-
     /* Send ARP packet if it hasn't been sent at least 5 times */
     if (req->times_sent < 5) {
         /* Construct ARP packet */
@@ -307,8 +303,40 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
 
     /* ARP request has been sent 5 times without a reply */
     else {
-         /* send icmp host unreachable to source addr of all pkts waiting
-           on this request */
+        Debug("Sent ARP request 5 times without reply\n");
+        /* Iterate through all packets and send a icmp host unreachable response back */
+        struct sr_packet * pkt = req->packets;
+        while (pkt) {
+            /* Get the headers for the current packet */
+            sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *) pkt->buf;
+            sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) (pkt->buf + sizeof(sr_ethernet_hdr_t));
+            sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) (pkt->buf + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+
+            /* Construct IP headers */
+            uint32_t temp = ip_hdr->ip_src;
+            ip_hdr->ip_src = ip_hdr->ip_dst;
+            ip_hdr->ip_dst = temp;
+
+            /* Construct ICMP error response */
+            icmp_hdr->icmp_type = 3;
+            icmp_hdr->icmp_code = 1;
+            icmp_hdr->icmp_sum = 0;
+            icmp_hdr->icmp_sum = cksum(icmp_hdr, sizeof(sr_icmp_hdr_t));
+            /* Check if there's an arp cache entry for the destination ip */
+            struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, ip_hdr->ip_dst);
+            if (entry) {
+                /* Construct ethernet headers */
+                struct sr_if * iface = sr_get_interface(sr, pkt->iface);
+                memcpy(eth_hdr->ether_dhost, entry->mac, ETHER_ADDR_LEN);
+                memcpy(eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN);
+
+                sr_send_packet(sr, pkt->buf, pkt->len, pkt->iface);
+            } else {
+                sr_arpcache_queuereq(&sr->cache, ip_hdr->ip_dst, pkt->buf, pkt->len, pkt->iface);
+            }
+            pkt = pkt->next;
+        }
+        /* Destroy the request */
         sr_arpreq_destroy(&sr->cache, req);
     }
 }
