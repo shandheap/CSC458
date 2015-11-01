@@ -20,15 +20,15 @@
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) {
     /* Copy the pointer to the arp cache requests array */
-    struct sr_arpreq * reqs = sr->cache.requests;
+    struct sr_arpreq * req = sr->cache.requests;
     /* Use intermediate temporary var for next request on queue */
     struct sr_arpreq * next;
 
     /* Iterate through ARP cache requests */
-    while (reqs) {
-        next = reqs->next;
-        sr_handle_arpreq(sr, reqs);
-        reqs = next;
+    while (req) {
+        next = req->next;
+        sr_handle_arpreq(sr, req);
+        req = next;
     }
 }
 
@@ -73,7 +73,7 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
                                        char *iface)
 {
     pthread_mutex_lock(&(cache->lock));
-    
+    Debug("Queueing packet\n");
     struct sr_arpreq *req;
     for (req = cache->requests; req != NULL; req = req->next) {
         if (req->ip == ip) {
@@ -281,6 +281,9 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
         memcpy(new_eth_hdr->ether_dhost, broadcast_mac, ETHER_ADDR_LEN);
         memcpy(new_eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN);
         new_eth_hdr->ether_type = ntohs(ethertype_arp);
+
+        /* Change broadcast mac for arp header */
+        memset(broadcast_mac, 0, ETHER_ADDR_LEN);
 
         /* Construct new arp headers */
         new_arp_hdr->ar_hrd = ntohs(arp_hrd_ethernet);

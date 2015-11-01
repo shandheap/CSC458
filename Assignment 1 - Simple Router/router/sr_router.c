@@ -181,6 +181,13 @@ void construct_icmp_error(struct sr_instance* sr,
     /* Reset the packet length */
     new_ip_hdr->ip_len = htons(new_pkt_size - sizeof(sr_ethernet_hdr_t));
 
+    /* Check if packet is TCP or UDP payload */
+    if (new_ip_hdr->ip_p == ip_protocol_tcp || new_ip_hdr->ip_p == ip_protocol_udp)
+    {
+        /* Change protocol to icmp */
+        new_ip_hdr->ip_p = ip_protocol_icmp;
+    }
+
     /* Do cache lookup */
     struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, ip_hdr->ip_src);
     if (entry) {
@@ -215,9 +222,6 @@ void construct_icmp_error(struct sr_instance* sr,
         /* Recompute the packet checksum */
         new_ip_hdr->ip_sum = 0;
         new_ip_hdr->ip_sum = cksum(new_ip_hdr, new_ip_hdr->ip_hl * 4);
-
-        print_hdr_ip((uint8_t *) new_ip_hdr);
-        print_hdr_icmp((uint8_t *) new_icmp_hdr);
 
         sr_arpcache_queuereq(&sr->cache, ip_hdr->ip_src, buf, new_pkt_size, interface);
     }
@@ -288,6 +292,8 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                 /* free memory for reply */
                 free(buf);
             }
+
+            break;
 
         /* ARP packet is a reply */
         case arp_op_reply:
@@ -375,6 +381,11 @@ void sr_handle_arp_packet(struct sr_instance* sr,
 
                 pkt = pkt->next;
             }
+
+            /* Destroy the request */
+            sr_arpreq_destroy(&sr->cache, req);
+
+            break;
     }
 }
 
@@ -410,6 +421,23 @@ void sr_handle_ip_packet(struct sr_instance* sr,
     {
         /* Decrement the TTL by 1 */
         ip_hdr->ip_ttl--;
+
+        /* Check if packet is TCP or UDP payload */
+        if (ip_hdr->ip_p == ip_protocol_tcp || ip_hdr->ip_p == ip_protocol_udp)
+        {
+            Debug("Packet was TCP or UDP payload for router interface\n");
+
+            /* Get the source IP routing table entry */
+            struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
+
+            Debug("Interface is %s\n", source_rt->interface);
+
+
+            /* Construct ICMP error response */
+            construct_icmp_error(sr, ip_hdr, packet, source_rt->interface, 3, 3);
+            return;
+        }
+
 
         /* Send ICMP error response if ttl is less than one */
         if (ip_hdr->ip_ttl < 1)
@@ -447,40 +475,13 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             new_ip_hdr->ip_src = ip_hdr->ip_dst;
             new_ip_hdr->ip_dst = ip_hdr->ip_src;
 
-            /* Check if packet is TCP or UDP payload */
-            if (ip_hdr->ip_p == ip_protocol_tcp || ip_hdr->ip_p == ip_protocol_udp)
-            {
-                Debug("Packet was TCP or UDP payload for router interface\n");
+            /* Construct echo reply */
+            Debug("Echo reply to IP packet, length(%d)\n", len);
+            /* Construct new ethernet headers */
+            modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
 
-                /* Get interface for incoming packet */
-                iface = sr_get_interface(sr, interface);
-
-                /* Construct new ethernet headers */
-                modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
-
-                /* Construct icmp error response
-                modify_icmp_header(new_icmp_hdr, 11, 0); */
-
-                print_addr_eth(new_eth_hdr->ether_dhost);
-                print_addr_eth(new_eth_hdr->ether_shost);
-                Debug("Interface is %s\n", iface->name);
-
-                print_addr_ip_int(ntohl(new_ip_hdr->ip_dst));
-                print_addr_ip_int(ntohl(new_ip_hdr->ip_src));
-
-                construct_icmp_error(sr, ip_hdr, packet, iface->name, 3, 3);
-            }
-
-                /* Otherwise construct echo reply */
-            else
-            {
-                Debug("Echo reply to IP packet, length(%d)\n", len);
-                /* Construct new ethernet headers */
-                modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
-
-                /* Construct new icmp headers */
-                modify_icmp_header(new_icmp_hdr, 0, 0);
-            }
+            /* Construct new icmp headers */
+            modify_icmp_header(new_icmp_hdr, 0, 0);
 
             /* Recompute the packet checksum */
             new_ip_hdr->ip_sum = 0;
