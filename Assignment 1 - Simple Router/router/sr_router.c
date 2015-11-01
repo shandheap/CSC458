@@ -93,17 +93,136 @@ void modify_arp_header(sr_arp_hdr_t * arp_hdr,            /* ARP header pointer 
 }
 
 void modify_icmp_header(sr_icmp_hdr_t * icmp_hdr,    /* ICMP header to modify */
-                           uint8_t icmp_type,            /* ICMP type */
-                           uint8_t icmp_code             /* ICMP code */
+                         uint8_t icmp_type,            /* ICMP type */
+                         uint8_t icmp_code             /* ICMP code */
 )
 {
-    /* Construct Ethernet headers */
+    /* Construct ICMP headers */
     icmp_hdr->icmp_type = icmp_type;
     icmp_hdr->icmp_code = icmp_code;
     icmp_hdr->icmp_sum = 0;
 
     /* Recompute checksum */
     icmp_hdr->icmp_sum = cksum(icmp_hdr, sizeof(sr_icmp_hdr_t));
+
+    return;
+}
+
+void modify_icmp_t3_header(sr_icmp_t3_hdr_t * icmp_hdr,     /* ICMP header to modify */
+                        uint8_t icmp_type,                  /* ICMP type */
+                        uint8_t icmp_code,                  /* ICMP code */
+                        uint16_t unused,                    /* Unused bytes */
+                        uint16_t next_mtu,                  /* Next MTU */
+                        uint8_t data[ICMP_DATA_SIZE]        /* Original IP header and first 8 bytes of data */
+)
+{
+    /* Construct ICMP headers */
+    icmp_hdr->icmp_type = icmp_type;
+    icmp_hdr->icmp_code = icmp_code;
+    icmp_hdr->unused = unused;
+    icmp_hdr->next_mtu = next_mtu;
+    memcpy(icmp_hdr->data, data, ICMP_DATA_SIZE);
+    icmp_hdr->icmp_sum = 0;
+
+    /* Recompute checksum */
+    icmp_hdr->icmp_sum = cksum(icmp_hdr, sizeof(sr_icmp_t3_hdr_t));
+
+    return;
+}
+
+void construct_icmp_error(struct sr_instance* sr,
+                          sr_ip_hdr_t * ip_hdr,  /* Original IP header */
+                          uint8_t * packet /* lent */,
+                          char* interface, /* lent */
+                          uint8_t icmp_type, /* ICMP type */
+                          uint8_t icmp_code /* ICMP code */
+)
+{
+    /* Prepare ICMP error response */
+    size_t old_pkt_size = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_hdr_t);
+    size_t new_pkt_size = sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t) + sizeof(sr_icmp_t3_hdr_t);
+    uint8_t * buf = malloc(new_pkt_size);
+    memcpy(buf, packet, old_pkt_size);
+
+    /* Get old icmp header */
+    sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+
+    /* Modify new packet for reply */
+    sr_ethernet_hdr_t * new_eth_hdr = (sr_ethernet_hdr_t *) buf;
+    sr_ip_hdr_t * new_ip_hdr = (sr_ip_hdr_t *) (buf + sizeof(sr_ethernet_hdr_t));
+    sr_icmp_t3_hdr_t * new_icmp_hdr = (sr_icmp_t3_hdr_t *)
+            (buf + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
+
+    /* Get router's interface */
+    struct sr_if * iface = sr_get_interface(sr, interface);
+
+    /* Modify new ip headers using the router's interface */
+    new_ip_hdr->ip_dst = iface->ip;
+
+    /* Decrement the TTL by 1 *//*
+    ip_hdr->ip_ttl--;
+    *//* Send ICMP error response if ttl is zero *//*
+    if (!ip_hdr->ip_ttl) {
+        *//* Construct new icmp headers *//*
+        uint8_t * data = malloc(ICMP_DATA_SIZE);
+        memcpy(data, ip_hdr, sizeof(sr_ip_hdr_t));
+        memcpy(data + sizeof(sr_ip_hdr_t), icmp_hdr, sizeof(sr_icmp_hdr_t) + 4);
+        modify_icmp_t3_header(new_icmp_hdr, 11, 0, 0, 0, data);
+        Debug("Time-to-live exceeded\n");
+    }*/
+
+
+    /* Construct reply as needed */
+    uint8_t * data = malloc(ICMP_DATA_SIZE);
+    memcpy(data, ip_hdr, sizeof(sr_ip_hdr_t));
+    memcpy(data + sizeof(sr_ip_hdr_t), icmp_hdr, sizeof(sr_icmp_hdr_t) + 4);
+    modify_icmp_t3_header(new_icmp_hdr, icmp_type, icmp_code, 0, 0, data);
+
+    /* Reset the packet length */
+    new_ip_hdr->ip_len = htons(new_pkt_size - sizeof(sr_ethernet_hdr_t));
+
+    /* Do cache lookup */
+    struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, ip_hdr->ip_src);
+    if (entry) {
+        Debug("Found cache entry for IP:\n");
+        print_addr_ip_int(ntohl(ip_hdr->ip_src));
+        /* Modify new ethernet headers */
+        modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
+        /* Modify new ip headers using the router's interface */
+        new_ip_hdr->ip_src = iface->ip;
+        new_ip_hdr->ip_dst = ip_hdr->ip_src;
+
+        /* Set return TTL */
+        new_ip_hdr->ip_ttl = 100;
+
+        /* Recompute the packet checksum */
+        new_ip_hdr->ip_sum = 0;
+        new_ip_hdr->ip_sum = cksum(new_ip_hdr, new_ip_hdr->ip_hl * 4);
+
+
+        print_hdr_ip((uint8_t *) new_ip_hdr);
+        print_hdr_icmp((uint8_t *) new_icmp_hdr);
+
+        /* Send error response back */
+        sr_send_packet(sr, buf, new_pkt_size, interface);
+    } else {
+        Debug("Cache miss for IP:\n");
+        print_addr_ip_int(ntohl(ip_hdr->ip_src));
+
+        /* Modify new ip headers using the router's interface */
+        new_ip_hdr->ip_dst = iface->ip;
+
+        /* Recompute the packet checksum */
+        new_ip_hdr->ip_sum = 0;
+        new_ip_hdr->ip_sum = cksum(new_ip_hdr, new_ip_hdr->ip_hl * 4);
+
+        print_hdr_ip((uint8_t *) new_ip_hdr);
+        print_hdr_icmp((uint8_t *) new_icmp_hdr);
+
+        sr_arpcache_queuereq(&sr->cache, ip_hdr->ip_src, buf, new_pkt_size, interface);
+    }
+    /* free memory for reply */
+    free(buf);
 
     return;
 }
@@ -174,11 +293,11 @@ void sr_handle_arp_packet(struct sr_instance* sr,
         case arp_op_reply:
             Debug("Received ARP reply, length(%d)\n", len);
             print_hdr_arp((uint8_t *) arp_hdr);
-            Debug("Caching ARP response for IP and MAC:\n");
-            print_addr_ip_int(ntohl(arp_hdr->ar_sip));
-            print_addr_eth(arp_hdr->ar_sha);
             /* Cache the response MAC address */
             struct sr_arpreq *req = sr_arpcache_insert(&sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
+            Debug("Cached ARP response for IP and MAC:\n");
+            print_addr_ip_int(ntohl(arp_hdr->ar_sip));
+            print_addr_eth(arp_hdr->ar_sha);
 
             /* Do nothing if there's no entry */
             if (!req) {
@@ -231,6 +350,7 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                     iface = sr_get_interface_by_ip(sr, ip_hdr->ip_dst);
                     /* IP destination is router interface so construct echo reply */
                     if (iface) {
+                        Debug("Destination is router interface\n");
                         /* Construct new ip headers */
                         new_ip_hdr->ip_src = ip_hdr->ip_dst;
                         new_ip_hdr->ip_dst = ip_hdr->ip_src;
@@ -238,8 +358,10 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                         /* Set TTL to 100 for echo reply */
                         new_ip_hdr->ip_ttl = 100;
 
-                        /* Modify new icmp headers */
-                        modify_icmp_header(new_icmp_hdr, 0, 0);
+                        /* Modify new icmp headers if it wasn't a ping */
+                        if (new_icmp_hdr->icmp_code == 8) {
+                            modify_icmp_header(new_icmp_hdr, 0, 0);
+                        }
                     }
                 }
 
@@ -363,7 +485,7 @@ void sr_handle_ip_packet(struct sr_instance* sr,
 
             /* Recompute the packet checksum */
             new_ip_hdr->ip_sum = 0;
-            new_ip_hdr->ip_sum = cksum(new_ip_hdr, IP_PROTO_LEN * 4);
+            new_ip_hdr->ip_sum = cksum(new_ip_hdr, ip_hdr->ip_hl * 4);
 
             print_hdr_ip((uint8_t *) new_ip_hdr);
             print_hdr_icmp((uint8_t *) new_icmp_hdr);
@@ -456,68 +578,9 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             /* No match so send icmp error response */
         else {
             Debug("Longest Prefix Match returned no results\n");
-            /* Prepare ICMP error response */
-            uint8_t * buf = malloc(len);
-            memcpy(buf, packet, len);
-
-            /* Modify new packet for reply */
-            sr_ethernet_hdr_t *new_eth_hdr = (sr_ethernet_hdr_t *) buf;
-            sr_ip_hdr_t *new_ip_hdr = (sr_ip_hdr_t *) (buf + sizeof(sr_ethernet_hdr_t));
-            sr_icmp_hdr_t *new_icmp_hdr = (sr_icmp_hdr_t *)
-                    (buf + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
-
-            /* Get router's interface */
-            struct sr_if * iface = sr_get_interface(sr, interface);
-
-            /* Construct new ip headers using the router's interface */
-            new_ip_hdr->ip_src = iface->ip;
-            new_ip_hdr->ip_dst = ip_hdr->ip_src;
-
-            /* Decrement the TTL by 1 */
-            new_ip_hdr->ip_ttl--;
-            /* Send ICMP error response if ttl is zero */
-            if (!new_ip_hdr->ip_ttl) {
-                /* Construct new icmp headers */
-                new_icmp_hdr->icmp_type = 11;
-                new_icmp_hdr->icmp_code = 0;
-                new_icmp_hdr->icmp_sum = 0;
-                new_icmp_hdr->icmp_sum = cksum(new_icmp_hdr, sizeof(sr_icmp_hdr_t));
-                Debug("Time-to-live exceeded 4\n");
-            }
-                /* Otherwise construct reply as needed */
-            else {
-                new_ip_hdr->ip_src = ip_hdr->ip_dst;
-                new_icmp_hdr->icmp_type = 3;
-                new_icmp_hdr->icmp_code = 0;
-                new_icmp_hdr->icmp_sum = 0;
-                new_icmp_hdr->icmp_sum = cksum(new_icmp_hdr, sizeof(sr_icmp_hdr_t));
-                Debug("Destination net unreachable\n");
-            }
-
-            /* Recompute the packet checksum */
-            new_ip_hdr->ip_sum = 0;
-            new_ip_hdr->ip_sum = cksum(new_ip_hdr, new_ip_hdr->ip_hl * 4);
-
-
-            print_hdr_ip((uint8_t *) new_ip_hdr);
-            print_hdr_icmp((uint8_t *) new_icmp_hdr);
-            /* Do cache lookup */
-            struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, ip_hdr->ip_src);
-            if (entry) {
-                Debug("Found cache entry for IP:\n");
-                print_addr_ip_int(ntohl(ip_hdr->ip_src));
-                /* Construct new ethernet headers */
-                memcpy(new_eth_hdr->ether_dhost, entry->mac, ETHER_ADDR_LEN);
-                memcpy(new_eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN);
-                /* Send error response back */
-                sr_send_packet(sr, buf, len, interface);
-            } else {
-                Debug("Cache miss for IP:\n");
-                print_addr_ip_int(ntohl(ip_hdr->ip_src));
-                sr_arpcache_queuereq(&sr->cache, ip_hdr->ip_src, buf, len, interface);
-            }
-            /* free memory for reply */
-            free(buf);
+            Debug("Destination net unreachable\n");
+            /* Construct ICMP error response */
+            construct_icmp_error(sr, ip_hdr, packet, interface, 3, 0);
 
             return;
         }

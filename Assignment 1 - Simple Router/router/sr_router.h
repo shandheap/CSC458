@@ -89,6 +89,14 @@ void modify_icmp_header(sr_icmp_hdr_t * icmp_hdr,    /* ICMP header to modify */
                            uint8_t icmp_code             /* ICMP code */
 );
 
+void construct_icmp_error(struct sr_instance* sr,
+                          sr_ip_hdr_t * ip_hdr,  /* Original IP header */
+                          uint8_t * packet /* lent */,
+                          char* interface, /* lent */
+                          uint8_t icmp_type, /* ICMP type */
+                          uint8_t icmp_code /* ICMP code */
+);
+
 void sr_handle_arp_packet(struct sr_instance* , uint8_t * , unsigned int , char* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
 

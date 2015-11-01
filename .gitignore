@@ -46,3 +46,7 @@
 *.d
 sr
 pox
+
+# Wireshark logs
+correct.pcap
+log.pcap

@@ -178,6 +178,28 @@ void sr_print_routing_entry(struct sr_rt* entry)
 } /* -- sr_print_routing_entry -- */
 
 /*---------------------------------------------------------------------
+ * Method: sr_find_rt_by_ip(struct sr_instance*, uint32_t)
+ * Scope:  Global
+ *
+ * This method is called to find a match for the given ip on
+ * the routing table's entries. Returns NULL if no match was found.
+ *
+ *---------------------------------------------------------------------*/
+struct sr_rt * sr_find_rt_by_ip(struct sr_instance* sr, uint32_t ip) {
+    struct sr_rt * rt_walker = sr->routing_table;
+    /* Compare IP with routing table entries to find match */
+    while (rt_walker) {
+        if (ip == rt_walker->dest.s_addr) {
+            return rt_walker;
+        }
+        rt_walker = rt_walker->next;
+    }
+
+    return rt_walker;
+} /* -- sr_find_rt_by_ip -- */
+
+
+/*---------------------------------------------------------------------
  * Method: sr_lpm(struct sr_instance*, uint32_t)
  * Scope:  Global
  *

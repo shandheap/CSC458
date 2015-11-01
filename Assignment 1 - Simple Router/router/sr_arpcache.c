@@ -11,6 +11,7 @@
 #include "sr_if.h"
 #include "sr_protocol.h"
 #include "sr_utils.h"
+#include "sr_rt.h"
 
 /* 
   This function gets called every second. For each request sent out, we keep
@@ -260,6 +261,7 @@ void *sr_arpcache_timeout(void *sr_ptr) {
 void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
     /* Send ARP packet if it hasn't been sent at least 5 times */
     if (req->times_sent < 5) {
+        Debug("Send ARP request\n");
         /* Construct ARP packet */
         size_t pkt_size = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
         uint8_t * buf = malloc(pkt_size);
@@ -291,7 +293,7 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
         memcpy(new_arp_hdr->ar_tha, broadcast_mac, ETHER_ADDR_LEN);
         memcpy(new_arp_hdr->ar_sha, iface->addr, ETHER_ADDR_LEN);
 
-        /* Send the ARP reply */
+        /* Send the ARP request */
         sr_send_packet(sr, buf, pkt_size, iface->name);
         /* free memory for packet */
         free(buf);
@@ -308,32 +310,17 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
         struct sr_packet * pkt = req->packets;
         while (pkt) {
             /* Get the headers for the current packet */
-            sr_ethernet_hdr_t * eth_hdr = (sr_ethernet_hdr_t *) pkt->buf;
             sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) (pkt->buf + sizeof(sr_ethernet_hdr_t));
-            sr_icmp_hdr_t * icmp_hdr = (sr_icmp_hdr_t *) (pkt->buf + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
 
-            /* Construct IP headers */
-            uint32_t temp = ip_hdr->ip_src;
-            ip_hdr->ip_src = ip_hdr->ip_dst;
-            ip_hdr->ip_dst = temp;
+            /* Get the source IP routing table entry */
+            struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
+
+            Debug("Destination host unreachable\n");
+            Debug("Interface is %s\n", source_rt->interface);
 
             /* Construct ICMP error response */
-            icmp_hdr->icmp_type = 3;
-            icmp_hdr->icmp_code = 1;
-            icmp_hdr->icmp_sum = 0;
-            icmp_hdr->icmp_sum = cksum(icmp_hdr, sizeof(sr_icmp_hdr_t));
-            /* Check if there's an arp cache entry for the destination ip */
-            struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, ip_hdr->ip_dst);
-            if (entry) {
-                /* Construct ethernet headers */
-                struct sr_if * iface = sr_get_interface(sr, pkt->iface);
-                memcpy(eth_hdr->ether_dhost, entry->mac, ETHER_ADDR_LEN);
-                memcpy(eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN);
+            construct_icmp_error(sr, ip_hdr, pkt->buf, source_rt->interface, 3, 1);
 
-                sr_send_packet(sr, pkt->buf, pkt->len, pkt->iface);
-            } else {
-                sr_arpcache_queuereq(&sr->cache, ip_hdr->ip_dst, pkt->buf, pkt->len, pkt->iface);
-            }
             pkt = pkt->next;
         }
         /* Destroy the request */
