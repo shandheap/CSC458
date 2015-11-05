@@ -159,18 +159,8 @@ void construct_icmp_error(struct sr_instance* sr,
     /* Modify new ip headers using the router's interface */
     new_ip_hdr->ip_dst = iface->ip;
 
-    /* Decrement the TTL by 1 *//*
-    ip_hdr->ip_ttl--;
-    *//* Send ICMP error response if ttl is less than one *//*
-    if (!ip_hdr->ip_ttl) {
-        *//* Construct new icmp headers *//*
-        uint8_t * data = malloc(ICMP_DATA_SIZE);
-        memcpy(data, ip_hdr, sizeof(sr_ip_hdr_t));
-        memcpy(data + sizeof(sr_ip_hdr_t), icmp_hdr, sizeof(sr_icmp_hdr_t) + 4);
-        modify_icmp_t3_header(new_icmp_hdr, 11, 0, 0, 0, data);
-        Debug("Time-to-live exceeded\n");
-    }*/
-
+    /* Reset Identification */
+    new_ip_hdr->ip_id = 0;
 
     /* Construct reply as needed */
     uint8_t * data = malloc(ICMP_DATA_SIZE);
@@ -395,23 +385,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
     print_hdr_ip((uint8_t *) ip_hdr);
 
     /* Checksums match so continue forwarding packet */
-
-    /* Decrement the TTL by 1 */
-    ip_hdr->ip_ttl--;
-    /* Send ICMP error response if ttl is less than one */
-    if (ip_hdr->ip_ttl < 1)
-    {
-        Debug("Time-to-live exceeded 2\n");
-        /* Get the source IP routing table entry */
-        struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
-
-        Debug("Interface is %s\n", source_rt->interface);
-
-        /* Construct ICMP error response */
-        construct_icmp_error(sr, ip_hdr, packet, source_rt->interface, 11, 0);
-        return;
-    }
-
     struct sr_if * iface = sr_get_interface_by_ip(sr, ip_hdr->ip_dst);
     /* Pinging one of router's interfaces */
     if (iface)
@@ -450,11 +423,18 @@ void sr_handle_ip_packet(struct sr_instance* sr,
 
             /* Construct echo reply */
             Debug("Echo reply to IP packet, length(%d)\n", len);
+
+            /* Get the incoming interface */
+            iface = sr_get_interface(sr, interface);
+
             /* Construct new ethernet headers */
             modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
 
             /* Construct new icmp headers */
             modify_icmp_header(new_icmp_hdr, 0, 0);
+
+            /* Set TTL to 100 for echo reply */
+            new_ip_hdr->ip_ttl = 100;
 
             /* Recompute the packet checksum */
             new_ip_hdr->ip_sum = 0;
@@ -479,6 +459,22 @@ void sr_handle_ip_packet(struct sr_instance* sr,
     /* Otherwise ip is not router interface so do longest prefix match */
     else
     {
+        /* Decrement the TTL by 1 */
+        ip_hdr->ip_ttl--;
+        /* Send ICMP error response if ttl is 0 */
+        if (ip_hdr->ip_ttl == 0)
+        {
+            Debug("Time-to-live exceeded 2\n");
+            /* Get the source IP routing table entry */
+            struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
+
+            Debug("Interface is %s\n", source_rt->interface);
+
+            /* Construct ICMP error response */
+            construct_icmp_error(sr, ip_hdr, packet, source_rt->interface, 11, 0);
+            return;
+        }
+
         /* Perform longest prefix match for destination ip */
         struct sr_rt * match = sr_lpm(sr, ip_hdr->ip_dst);
         /* There's a longest prefix match so use that hop ip */
