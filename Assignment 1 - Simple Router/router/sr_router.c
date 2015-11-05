@@ -392,7 +392,7 @@ void sr_handle_ip_packet(struct sr_instance* sr,
         /* Check if packet is TCP or UDP payload */
         if (ip_hdr->ip_p == ip_protocol_tcp || ip_hdr->ip_p == ip_protocol_udp)
         {
-            Debug("Packet was TCP or UDP payload for router interface\n");
+            Debug("Port unreachable\n");
 
             /* Construct ICMP error response */
             construct_icmp_error(sr, ip_hdr, packet, interface, 3, 3);
@@ -521,10 +521,8 @@ void sr_handle_ip_packet(struct sr_instance* sr,
                 sr_arpcache_queuereq(&sr->cache, match->gw.s_addr, packet, len, match->interface);
             }
         }
-            /* TODO: This must be queued not echo replied directly */
-            /* No match so send icmp error response */
+        /* No match so send icmp error response */
         else {
-            Debug("Longest Prefix Match returned no results\n");
             Debug("Destination net unreachable\n");
             /* Construct ICMP error response */
             construct_icmp_error(sr, ip_hdr, packet, interface, 3, 0);

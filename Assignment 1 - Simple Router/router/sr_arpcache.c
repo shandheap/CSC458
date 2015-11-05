@@ -319,7 +319,6 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
             struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
 
             Debug("Destination host unreachable\n");
-            Debug("Interface is %s\n", source_rt->interface);
 
             /* Construct ICMP error response */
             construct_icmp_error(sr, ip_hdr, pkt->buf, source_rt->interface, 3, 1);
