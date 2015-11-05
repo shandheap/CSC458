@@ -343,10 +343,8 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                     /* Set TTL to 100 for echo reply */
                     new_ip_hdr->ip_ttl = 100;
 
-                    /* Modify new icmp headers if it wasn't a ping */
-                    if (new_icmp_hdr->icmp_code == 8) {
-                        modify_icmp_header(new_icmp_hdr, 0, 0);
-                    }
+                    /* Modify new icmp headers */
+                    modify_icmp_header(new_icmp_hdr, 0, 0);
                 }
 
                 /* Recompute the packet checksum */
@@ -356,7 +354,7 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                 print_hdr_ip((uint8_t *) new_ip_hdr);
                 print_hdr_icmp((uint8_t *) new_icmp_hdr);
                 /* Send ping response */
-                sr_send_packet(sr, buf, pkt->len, interface);
+                sr_send_packet(sr, buf, pkt->len, pkt->iface);
 
                 /* free memory for reply */
                 free(buf);
