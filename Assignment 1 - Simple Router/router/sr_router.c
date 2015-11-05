@@ -423,14 +423,8 @@ void sr_handle_ip_packet(struct sr_instance* sr,
         {
             Debug("Packet was TCP or UDP payload for router interface\n");
 
-            /* Get the source IP routing table entry */
-            struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
-
-            Debug("Interface is %s\n", source_rt->interface);
-
-
             /* Construct ICMP error response */
-            construct_icmp_error(sr, ip_hdr, packet, source_rt->interface, 3, 3);
+            construct_icmp_error(sr, ip_hdr, packet, interface, 3, 3);
             return;
         }
 
@@ -471,17 +465,17 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             print_hdr_ip((uint8_t *) new_ip_hdr);
             print_hdr_icmp((uint8_t *) new_icmp_hdr);
             /* Send ping response */
-            sr_send_packet(sr, buf, len, iface->name);
+            sr_send_packet(sr, buf, len, interface);
             /* free memory for reply */
             free(buf);
         }
 
-            /* Otherwise queue packet on cache requests */
+        /* Otherwise queue packet on cache requests */
         else
         {
             Debug("Cache miss for IP:\n");
             print_addr_ip_int(ntohl(ip_hdr->ip_src));
-            sr_arpcache_queuereq(&sr->cache, ip_hdr->ip_src, packet, len, iface->name);
+            sr_arpcache_queuereq(&sr->cache, ip_hdr->ip_src, packet, len, interface);
         }
     }
     /* Otherwise ip is not router interface so do longest prefix match */
