@@ -73,7 +73,6 @@ struct sr_arpreq *sr_arpcache_queuereq(struct sr_arpcache *cache,
                                        char *iface)
 {
     pthread_mutex_lock(&(cache->lock));
-    Debug("Queueing packet\n");
     struct sr_arpreq *req;
     for (req = cache->requests; req != NULL; req = req->next) {
         if (req->ip == ip) {
@@ -261,7 +260,6 @@ void *sr_arpcache_timeout(void *sr_ptr) {
 void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
     /* Send ARP packet if it hasn't been sent at least 5 times */
     if (req->times_sent < 5) {
-        Debug("Send ARP request\n");
         /* Construct ARP packet */
         size_t pkt_size = sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t);
         uint8_t * buf = malloc(pkt_size);
@@ -308,7 +306,6 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
 
     /* ARP request has been sent 5 times without a reply */
     else {
-        Debug("Sent ARP request 5 times without reply\n");
         /* Iterate through all packets and send a icmp host unreachable response back */
         struct sr_packet * pkt = req->packets;
         while (pkt) {
@@ -318,7 +315,6 @@ void sr_handle_arpreq(struct sr_instance *sr, struct sr_arpreq *req) {
             /* Get the source IP routing table entry */
             struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
 
-            Debug("Destination host unreachable\n");
 
             /* Construct ICMP error response */
             construct_icmp_error(sr, ip_hdr, pkt->buf, source_rt->interface, 3, 1);

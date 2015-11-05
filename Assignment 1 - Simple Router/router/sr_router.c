@@ -181,8 +181,6 @@ void construct_icmp_error(struct sr_instance* sr,
     /* Do cache lookup */
     struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, ip_hdr->ip_src);
     if (entry) {
-        Debug("Found cache entry for IP:\n");
-        print_addr_ip_int(ntohl(ip_hdr->ip_src));
         /* Modify new ethernet headers */
         modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
         /* Modify new ip headers using the router's interface */
@@ -197,14 +195,10 @@ void construct_icmp_error(struct sr_instance* sr,
         new_ip_hdr->ip_sum = cksum(new_ip_hdr, new_ip_hdr->ip_hl * 4);
 
 
-        print_hdr_ip((uint8_t *) new_ip_hdr);
-        print_hdr_icmp((uint8_t *) new_icmp_hdr);
 
         /* Send error response back */
         sr_send_packet(sr, buf, new_pkt_size, interface);
     } else {
-        Debug("Cache miss for IP:\n");
-        print_addr_ip_int(ntohl(ip_hdr->ip_src));
 
         /* Modify new ip headers using the router's interface */
         new_ip_hdr->ip_dst = iface->ip;
@@ -241,8 +235,6 @@ void sr_handle_arp_packet(struct sr_instance* sr,
     {
         /* ARP packet is a request */
         case arp_op_request:
-            Debug("Received ARP request, length(%d)\n", len);
-            print_hdr_arp((uint8_t *) arp_hdr);
             /* Get the router interface record for target ip */
             struct sr_if *iface = sr_get_interface_by_ip(sr, arp_hdr->ar_tip);
             if (iface) {
@@ -275,8 +267,6 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                         arp_hdr->ar_sip
                 );
 
-                Debug("Send ARP reply, length(%d)\n", len);
-                print_hdr_arp((uint8_t *) new_arp_hdr);
                 /* Send the ARP reply */
                 sr_send_packet(sr, buf, len, interface);
                 /* free memory for reply */
@@ -287,13 +277,8 @@ void sr_handle_arp_packet(struct sr_instance* sr,
 
         /* ARP packet is a reply */
         case arp_op_reply:
-            Debug("Received ARP reply, length(%d)\n", len);
-            print_hdr_arp((uint8_t *) arp_hdr);
             /* Cache the response MAC address */
             struct sr_arpreq *req = sr_arpcache_insert(&sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
-            Debug("Cached ARP response for IP and MAC:\n");
-            print_addr_ip_int(ntohl(arp_hdr->ar_sip));
-            print_addr_eth(arp_hdr->ar_sha);
 
             /* Do nothing if there's no entry */
             if (!req) {
@@ -316,7 +301,6 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                 sr_icmp_hdr_t *new_icmp_hdr = (sr_icmp_hdr_t *)
                         (buf + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
 
-                Debug("Forward IP packet, length(%d)\n", pkt->len);
                 struct sr_if *iface = sr_get_interface(sr, interface);
 
                 /* Modify new ethernet headers */
@@ -325,7 +309,6 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                 iface = sr_get_interface_by_ip(sr, ip_hdr->ip_dst);
                 /* IP destination is router interface so construct echo reply */
                 if (iface) {
-                    Debug("Destination is router interface\n");
                     /* Construct new ip headers */
                     new_ip_hdr->ip_src = ip_hdr->ip_dst;
                     new_ip_hdr->ip_dst = ip_hdr->ip_src;
@@ -343,8 +326,6 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                 new_ip_hdr->ip_sum = 0;
                 new_ip_hdr->ip_sum = cksum(new_ip_hdr, new_ip_hdr->ip_hl * 4);
 
-                print_hdr_ip((uint8_t *) new_ip_hdr);
-                print_hdr_icmp((uint8_t *) new_icmp_hdr);
                 /* Send ping response */
                 sr_send_packet(sr, buf, pkt->len, pkt->iface);
 
@@ -383,8 +364,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
         return;
     }
 
-    Debug("Received IP packet, length(%d)\n", len);
-    print_hdr_ip((uint8_t *) ip_hdr);
 
     /* Checksums match so continue forwarding packet */
     struct sr_if * iface = sr_get_interface_by_ip(sr, ip_hdr->ip_dst);
@@ -394,7 +373,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
         /* Check if packet is TCP or UDP payload */
         if (ip_hdr->ip_p == ip_protocol_tcp || ip_hdr->ip_p == ip_protocol_udp)
         {
-            Debug("Port unreachable\n");
 
             /* Construct ICMP error response */
             construct_icmp_error(sr, ip_hdr, packet, interface, 3, 3);
@@ -407,8 +385,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
         /* If cache entry exists then send an echo reply to the corresponding MAC */
         if (entry)
         {
-            Debug("Found cache entry for IP:\n");
-            print_addr_ip_int(ntohl(ip_hdr->ip_src));
             /* Prepare ICMP echo reply */
             uint8_t * buf = malloc(len);
             memcpy(buf, packet, len);
@@ -424,7 +400,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             new_ip_hdr->ip_dst = ip_hdr->ip_src;
 
             /* Construct echo reply */
-            Debug("Echo reply to IP packet, length(%d)\n", len);
 
             /* Get the incoming interface */
             iface = sr_get_interface(sr, interface);
@@ -442,8 +417,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             new_ip_hdr->ip_sum = 0;
             new_ip_hdr->ip_sum = cksum(new_ip_hdr, ip_hdr->ip_hl * 4);
 
-            print_hdr_ip((uint8_t *) new_ip_hdr);
-            print_hdr_icmp((uint8_t *) new_icmp_hdr);
             /* Send ping response */
             sr_send_packet(sr, buf, len, interface);
             /* free memory for reply */
@@ -453,8 +426,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
         /* Otherwise queue packet on cache requests */
         else
         {
-            Debug("Cache miss for IP:\n");
-            print_addr_ip_int(ntohl(ip_hdr->ip_src));
             sr_arpcache_queuereq(&sr->cache, ip_hdr->ip_src, packet, len, interface);
         }
     }
@@ -466,11 +437,9 @@ void sr_handle_ip_packet(struct sr_instance* sr,
         /* Send ICMP error response if ttl is 0 */
         if (ip_hdr->ip_ttl == 0)
         {
-            Debug("Time-to-live exceeded 2\n");
             /* Get the source IP routing table entry */
             struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
 
-            Debug("Interface is %s\n", source_rt->interface);
 
             /* Construct ICMP error response */
             construct_icmp_error(sr, ip_hdr, packet, source_rt->interface, 11, 0);
@@ -486,8 +455,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             struct sr_arpentry * entry = sr_arpcache_lookup(&sr->cache, match->gw.s_addr);
             /* If cache entry exists then return the corresponding MAC */
             if (entry) {
-                Debug("Found cache entry for IP:\n");
-                print_addr_ip_int(ntohl(match->gw.s_addr));
                 /* Get corresponding router interface */
                 struct sr_if * iface = sr_get_interface(sr, match->interface);
 
@@ -501,7 +468,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
                 sr_icmp_hdr_t *new_icmp_hdr = (sr_icmp_hdr_t *)
                         (buf + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
 
-                Debug("Forward IP packet, length(%d)\n", len);
                 /* Modify new ethernet headers */
                 modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
 
@@ -509,8 +475,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
                 new_ip_hdr->ip_sum = 0;
                 new_ip_hdr->ip_sum = cksum(new_ip_hdr, new_ip_hdr->ip_hl * 4);
 
-                print_hdr_ip((uint8_t *) new_ip_hdr);
-                print_hdr_icmp((uint8_t *) new_icmp_hdr);
                 /* Send ping response */
                 sr_send_packet(sr, buf, len, iface->name);
                 /* free memory for reply */
@@ -518,14 +482,11 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             }
                 /* No cache entry so queue ARP request */
             else {
-                Debug("Cache miss for IP:\n");
-                print_addr_ip_int(ntohl(match->gw.s_addr));
                 sr_arpcache_queuereq(&sr->cache, match->gw.s_addr, packet, len, match->interface);
             }
         }
         /* No match so send icmp error response */
         else {
-            Debug("Destination net unreachable\n");
             /* Construct ICMP error response */
             construct_icmp_error(sr, ip_hdr, packet, interface, 3, 0);
 
