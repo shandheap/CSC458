@@ -235,6 +235,7 @@ void sr_handle_arp_packet(struct sr_instance* sr,
     {
         /* ARP packet is a request */
         case arp_op_request:
+            Debug("Received ARP request, length(%d)\n", len);
             /* Get the router interface record for target ip */
             struct sr_if *iface = sr_get_interface_by_ip(sr, arp_hdr->ar_tip);
             if (iface) {
@@ -277,6 +278,7 @@ void sr_handle_arp_packet(struct sr_instance* sr,
 
         /* ARP packet is a reply */
         case arp_op_reply:
+            Debug("Received ARP reply, length(%d)\n", len);
             /* Cache the response MAC address */
             struct sr_arpreq *req = sr_arpcache_insert(&sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
 
@@ -355,6 +357,9 @@ void sr_handle_ip_packet(struct sr_instance* sr,
 
     /* Get the packet's ip headers */
     sr_ip_hdr_t * ip_hdr = (sr_ip_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+
+    printf("Receive IP packet, length(%d)\n", len);
+    print_hdr_ip((uint8_t *) ip_hdr);
 
     /* Verify checksum by ensuring that the computed cksum is zero */
     uint16_t verify_sum = ~cksum(ip_hdr, ip_hdr->ip_hl * 4);
@@ -465,8 +470,6 @@ void sr_handle_ip_packet(struct sr_instance* sr,
                 /* Modify new packet for reply */
                 sr_ethernet_hdr_t *new_eth_hdr = (sr_ethernet_hdr_t *) buf;
                 sr_ip_hdr_t *new_ip_hdr = (sr_ip_hdr_t *) (buf + sizeof(sr_ethernet_hdr_t));
-                sr_icmp_hdr_t *new_icmp_hdr = (sr_icmp_hdr_t *)
-                        (buf + sizeof(sr_ethernet_hdr_t) + sizeof(sr_ip_hdr_t));
 
                 /* Modify new ethernet headers */
                 modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
@@ -493,6 +496,8 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             return;
         }
     }
+
+    printf("Modified IP packet, length(%d)\n", len);
 }
 
 
