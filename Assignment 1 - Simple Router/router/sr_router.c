@@ -92,22 +92,6 @@ void modify_arp_header(sr_arp_hdr_t * arp_hdr,            /* ARP header pointer 
     return;
 }
 
-void modify_icmp_header(sr_icmp_hdr_t * icmp_hdr,    /* ICMP header to modify */
-                         uint8_t icmp_type,            /* ICMP type */
-                         uint8_t icmp_code             /* ICMP code */
-)
-{
-    /* Construct ICMP headers */
-    icmp_hdr->icmp_type = icmp_type;
-    icmp_hdr->icmp_code = icmp_code;
-    icmp_hdr->icmp_sum = 0;
-
-    /* Recompute checksum */
-    icmp_hdr->icmp_sum = cksum(icmp_hdr, sizeof(sr_icmp_hdr_t));
-
-    return;
-}
-
 void modify_icmp_t3_header(sr_icmp_t3_hdr_t * icmp_hdr,     /* ICMP header to modify */
                         uint8_t icmp_type,                  /* ICMP type */
                         uint8_t icmp_code,                  /* ICMP code */
