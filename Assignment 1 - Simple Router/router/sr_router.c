@@ -319,7 +319,7 @@ void sr_handle_arp_packet(struct sr_instance* sr,
                     new_ip_hdr->ip_ttl = 100;
 
                     /* Modify new icmp headers */
-                    if (new_icmp_hdr->icmp_code == 8) {
+                    if (new_icmp_hdr->icmp_type == 8) {
                         modify_icmp_header(new_icmp_hdr, 0, 0);
                     }
                 }
