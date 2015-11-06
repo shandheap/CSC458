@@ -320,7 +320,14 @@ void sr_handle_arp_packet(struct sr_instance* sr,
 
                     /* Modify new icmp headers */
                     if (new_icmp_hdr->icmp_type == 8) {
-                        modify_icmp_header(new_icmp_hdr, 0, 0);
+                        size_t icmp_hdr_len = pkt->len - sizeof(sr_ethernet_hdr_t) - sizeof(sr_ip_hdr_t);
+                        new_icmp_hdr->icmp_type = 0;
+                        new_icmp_hdr->icmp_code = 0;
+
+                        new_icmp_hdr->icmp_sum = 0;
+
+                        /* Recompute checksum */
+                        new_icmp_hdr->icmp_sum = cksum(new_icmp_hdr, icmp_hdr_len);
                     }
                 }
 
@@ -413,7 +420,14 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             modify_eth_header(new_eth_hdr, entry->mac, iface->addr, ethertype_ip);
 
             /* Construct new icmp headers */
-            modify_icmp_header(new_icmp_hdr, 0, 0);
+            size_t icmp_hdr_len = len - sizeof(sr_ethernet_hdr_t) - sizeof(sr_ip_hdr_t);
+            new_icmp_hdr->icmp_type = 0;
+            new_icmp_hdr->icmp_code = 0;
+
+            new_icmp_hdr->icmp_sum = 0;
+
+            /* Recompute checksum */
+            new_icmp_hdr->icmp_sum = cksum(new_icmp_hdr, icmp_hdr_len);
 
             /* Set TTL to 100 for echo reply */
             new_ip_hdr->ip_ttl = 100;
