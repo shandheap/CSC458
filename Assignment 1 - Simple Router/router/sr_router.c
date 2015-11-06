@@ -443,7 +443,8 @@ void sr_handle_ip_packet(struct sr_instance* sr,
             /* Get the source IP routing table entry */
             struct sr_rt * source_rt = sr_find_rt_by_ip(sr, ip_hdr->ip_src);
 
-
+            /* Change TTL back to original */
+            ip_hdr->ip_ttl++;
             /* Construct ICMP error response */
             construct_icmp_error(sr, ip_hdr, packet, source_rt->interface, 11, 0);
             return;
