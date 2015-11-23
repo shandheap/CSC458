@@ -23,8 +23,7 @@ int sr_nat_init(struct sr_nat *nat) { /* Initializes the nat */
 
   /* CAREFUL MODIFYING CODE ABOVE THIS LINE! */
 
-  nat->mappings = NULL;
-  /* Initialize any variables here */
+  nat->mappings = malloc(sizeof(struct sr_nat_mapping));
 
   return success;
 }
@@ -34,11 +33,33 @@ int sr_nat_destroy(struct sr_nat *nat) {  /* Destroys the nat (free memory) */
 
   pthread_mutex_lock(&(nat->lock));
 
+  struct sr_nat_mapping * cur, next;
+  struct sr_nat_connection * cur_conn, next_conn;
+
   /* free nat memory here */
+  cur = nat->mappings;
+  while (cur) {
+    /* Save pointer to next mapping */
+    next = cur->next;
+
+    cur_conn = cur->conns;
+    /* Free nat connections */
+    while (cur_conn) {
+      next_conn = cur_conn->next;
+
+      free(cur_conn);
+      cur_conn = next_conn;
+    }
+
+    /* Free nat memory */
+    free(cur);
+    cur = next;
+  }
 
   pthread_kill(nat->thread, SIGKILL);
   return pthread_mutex_destroy(&(nat->lock)) &&
-    pthread_mutexattr_destroy(&(nat->attr));
+    pthread_mutexattr_destroy(&(nat->attr)) &&
+    pthread_attr_destroy(&(nat->thread_attr));
 
 }
 
@@ -51,6 +72,30 @@ void *sr_nat_timeout(void *nat_ptr) {  /* Periodic Timout handling */
     time_t curtime = time(NULL);
 
     /* handle periodic tasks here */
+    /* TODO: Change max interval */
+    struct sr_nat_mapping * cur, next;
+
+    /* free nat memory here */
+    cur = nat->mappings;
+    while (cur) {
+      next = cur->next;
+      cur_conn = cur->conns;
+      /* Check if nat entry has timed out */
+      if (difftime(curtime, cur->last_updated) > 60) {
+        /* Free nat connections */
+        while (cur_conn) {
+          next_conn = cur_conn->next;
+
+          free(cur_conn);
+          cur_conn = next_conn;
+        }
+
+        /* Free nat memory */
+        free(cur);
+      }
+
+      cur = next;
+    }
 
     pthread_mutex_unlock(&(nat->lock));
   }
@@ -67,6 +112,18 @@ struct sr_nat_mapping *sr_nat_lookup_external(struct sr_nat *nat,
   /* handle lookup here, malloc and assign to copy */
   struct sr_nat_mapping *copy = NULL;
 
+  /* Do nat lookup */
+  struct sr_nat_mapping * cur, next;
+  cur = nat->mappings;
+  while (cur) {
+    next = cur->next;
+    if (cur->aux_ext == aux_ext && cur->type == type) {
+      copy = malloc(sizeof(struct sr_nat_mapping));
+      memcpy(copy, cur, sizeof(struct sr_nat_mapping));
+    }
+    cur = next;
+  }
+
   pthread_mutex_unlock(&(nat->lock));
   return copy;
 }
@@ -80,6 +137,18 @@ struct sr_nat_mapping *sr_nat_lookup_internal(struct sr_nat *nat,
 
   /* handle lookup here, malloc and assign to copy. */
   struct sr_nat_mapping *copy = NULL;
+
+  /* Do nat lookup */
+  struct sr_nat_mapping * cur, next;
+  cur = nat->mappings;
+  while (cur) {
+    next = cur->next;
+    if (cur->ip_int == ip_int && cur->aux_int == aux_int && cur->type == type) {
+      copy = malloc(sizeof(struct sr_nat_mapping));
+      memcpy(copy, cur, sizeof(struct sr_nat_mapping));
+    }
+    cur = next;
+  }
 
   pthread_mutex_unlock(&(nat->lock));
   return copy;
@@ -95,6 +164,15 @@ struct sr_nat_mapping *sr_nat_insert_mapping(struct sr_nat *nat,
 
   /* handle insert here, create a mapping, and then return a copy of it */
   struct sr_nat_mapping *mapping = NULL;
+
+  /* Construct nat mapping */
+  mapping = malloc(sizeof(struct sr_nat_mapping));
+  mapping->type = type;
+  mapping->ip_int = ip_int;
+  mapping->aux_int = aux_int;
+  time(&(mapping->last_updated));
+  mapping->conns = NULL;
+  mapping->next = NULL;
 
   pthread_mutex_unlock(&(nat->lock));
   return mapping;
