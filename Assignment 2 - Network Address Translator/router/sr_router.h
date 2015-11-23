@@ -43,6 +43,7 @@ struct sr_rt;
 
 struct sr_instance
 {
+    int nat; /* distinguishes between NAT and SR */
     int  sockfd;   /* socket to server */
     char user[32]; /* user name */
     char host[32]; /* host name */ 

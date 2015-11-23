@@ -66,6 +66,7 @@ int main(int argc, char **argv)
     unsigned int topo = DEFAULT_TOPO;
     char *logfile = 0;
     struct sr_instance sr;
+    int nat;
 
     printf("Using %s\n", VERSION_INFO);
 
@@ -100,6 +101,9 @@ int main(int argc, char **argv)
                 break;
             case 'T':
                 template = optarg;
+                break;
+            case 'n':
+                nat = 1;
                 break;
         } /* switch */
     } /* -- while -- */
@@ -155,6 +159,9 @@ int main(int argc, char **argv)
       /* Read from specified routing table */
       sr_load_rt_wrap(&sr, rtable);
     }
+
+    /* Set NAT flag on sr_instance */
+    sr.nat = nat;
 
     /* call router init (for arp subsystem etc.) */
     sr_init(&sr);
@@ -249,6 +256,7 @@ static void sr_init_instance(struct sr_instance* sr)
     sr->if_list = 0;
     sr->routing_table = 0;
     sr->logfile = 0;
+    sr->nat = 0;
 } /* -- sr_init_instance -- */
 
 /*-----------------------------------------------------------------------------
